@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Persistent Demand Game</title>
+<style>
+body { font-family: Arial; margin: 20px; }
+.hidden { display:none; }
+button { margin-top:10px; padding:6px 12px; }
+input { margin-top:5px; }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1 -->
+<div id="page1">
+<h2>Persistent Demand Game</h2>
+<label>Name:</label><br>
+<input id="name"><br>
+<label>Registration No:</label><br>
+<input id="reg"><br><br>
+<button type="button" onclick="startGame()">Start Game</button>
+</div>
+
+<!-- GAME PAGE -->
+<div id="game" class="hidden">
+<h2>Game</h2>
+<div id="info"></div><br>
+<label>Investment (1-5):</label><br>
+<input id="inv" type="number" min="1" max="5"><br>
+<button type="button" onclick="play()">Submit</button>
+<button type="button" onclick="exitGame()">Exit</button>
+</div>
+
+<!-- RESULT PAGE -->
+<div id="result" class="hidden">
+<h2>Results</h2>
+<div id="summary"></div><br>
+<button type="button" onclick="downloadCSV()">Download CSV</button>
+</div>
+
+<script>
+
+const CONFIG = {
+  T: 20,
+  p: 0.2,
+  exit_cost: 0.33 * 4 * 20,
+  D_low: 5,
+  D_high: 15,
+  p1: 0.8,
+  p2: 0.8,
+  transition: {
+    1: [0.5,0.25,0.125,0.0625,0.0625],
+    2: [0.25,0.5,0.125,0.0625,0.0625],
+    3: [0.125,0.25,0.5,0.0625,0.0625],
+    4: [0.0625,0.125,0.25,0.5,0.125],
+    5: [0.0625,0.0625,0.125,0.25,0.5]
+  }
+};
+
+let state = {
+  name: "",
+  reg: "",
+  period: 1,
+  A: 3,
+  M: 4,
+  D: CONFIG.D_low,
+  previousInvestment: 0,
+  cum_profit: 0,
+  history: []
+};
+
+function startGame(){
+  const name = document.getElementById("name").value.trim();
+  const reg = document.getElementById("reg").value.trim();
+
+  if(name === "" || reg === ""){
+    alert("Please enter name and registration number");
+    return;
+  }
+
+  state.name = name;
+  state.reg = reg;
+
+  document.getElementById("page1").classList.add("hidden");
+  document.getElementById("game").classList.remove("hidden");
+
+  updateUI();
+}
+
+function updateUI(){
+  let average_profit =     state.history.length > 0     ? state.cum_profit / state.history.length     : 0;
+  let exit_value = state.cum_profit + (CONFIG.T - state.period) * average_profit - CONFIG.exit_cost;
+let last_profit = state.history.length > 0 ? state.history[state.history.length-1].profit: 0;
+
+  document.getElementById("info").innerHTML =
+  "Period: " + state.period + "<br>" +
+  "Productivity (A): " + state.A + "<br>" +
+  "Firms (M): " + state.M + "<br>" +
+  "Demand (D): " + state.D + "<br>" +
+  "Investment Cost Applied This Period: " + state.previousInvestment + "<br>" +
+  "Cumulative Profit: " + state.cum_profit.toFixed(2) + "<br>" +
+  "Last Profit: " + last_profit.toFixed(2) + "<br>" +
+  "Exit Value: " + exit_value.toFixed(2);
+}
+
+function drawA(x){
+  if(Math.random() < CONFIG.p){
+    return state.A;
+  }
+  let probs = CONFIG.transition[x];
+  let r = Math.random();
+  let cum = 0;
+  for(let i=0; i<5; i++){
+    cum += probs[i];
+    if(r < cum) return i+1;
+  }
+  return 5;
+}
+
+function drawM(){
+  return Math.floor(Math.random() * 5) + 3; // 3 to 7
+}
+
+function drawD(){
+  if(state.D === CONFIG.D_low){
+    return Math.random() < CONFIG.p1 ? CONFIG.D_low : CONFIG.D_high;
+  } else {
+    return Math.random() < CONFIG.p2 ? CONFIG.D_high : CONFIG.D_low;
+  }
+}
+
+function computeProfit(A, M, D, previousInvestment){
+  let K = M + 1 + (1/A);
+  let term1 = (D*D) / K;
+  let term2 = (M + 1/(2*A)) * (D*D) / (K*K);
+  return term1 - term2 - previousInvestment;
+}
+
+function play(){
+  let x = parseInt(document.getElementById("inv").value);
+
+  if(!x || x < 1 || x > 5){
+    alert("Choose investment between 1 and 5");
+    return;
+  }
+
+  let profit = computeProfit(state.A, state.M, state.D, state.previousInvestment);
+
+  state.cum_profit += profit;
+
+  state.history.push({
+    name: state.name,
+    reg: state.reg,
+    period: state.period,
+    A: state.A,
+    M: state.M,
+    D: state.D,
+    investment: x,
+    previous_investment_cost: state.previousInvestment,
+    profit: profit,
+    cum_profit: state.cum_profit,
+    decision: "stay"
+  });
+
+sendToGoogle({
+  name: state.name,
+  reg: state.reg,
+  period: state.period,
+  A: state.A,
+  M: state.M,
+  D: state.D,
+  investment: x,
+  profit: profit,
+  cum_profit: state.cum_profit,
+  decision: "stay"
+});
+
+  state.A = drawA(x);
+  state.previousInvestment = x;
+  state.M = drawM();
+  state.D = drawD();
+  state.period++;
+
+  document.getElementById("inv").value = "";
+
+  if(state.period > CONFIG.T){
+    endGame();
+    return;
+  }
+
+  updateUI();
+}
+
+function exitGame(){
+  let t = state.period;
+  let average_profit = state.history.length > 0 ? state.cum_profit / state.history.length : 0;
+
+  let exit_value = state.cum_profit + (CONFIG.T - t) * average_profit - CONFIG.exit_cost;
+
+  state.history.push({
+    name: state.name,
+    reg: state.reg,
+    period: state.period,
+    A: state.A,
+    M: state.M,
+    D: state.D,
+    investment: 0,
+    profit: 0,
+    cum_profit: exit_value,
+    decision: "exit"
+  });
+
+sendToGoogle({
+  name: state.name,
+  reg: state.reg,
+  period: state.period,
+  A: state.A,
+  M: state.M,
+  D: state.D,
+  investment: 0,
+  profit: 0,
+  cum_profit: exit_value,
+  decision: "exit"
+});
+
+  state.cum_profit = exit_value;
+
+  endGame();
+}
+
+function sendToGoogle(row){
+
+  fetch(
+    "https://script.google.com/macros/s/AKfycbxcXtJFbYGA2_aZdsKS2NG_nNqXCZba2hr2mxabxl-mdlKsIG51zZocQzqG3av-MBc/exec",
+    {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(row)
+    }
+  );
+
+}
+
+function endGame(){
+  document.getElementById("game").classList.add("hidden");
+  document.getElementById("result").classList.remove("hidden");
+
+  document.getElementById("summary").innerHTML =
+    "Final Payoff: " + state.cum_profit.toFixed(2);
+}
+
+function downloadCSV(){
+  let rows = ["Name,Reg,Period,A,M,D,Investment,Profit,CumProfit,Decision"];
+
+  state.history.forEach(r => {
+    rows.push(
+      r.name + "," + r.reg + "," + r.period + "," + r.A + "," + r.M + "," + r.D + "," + r.investment + "," + r.profit + "," + r.cum_profit + "," + r.decision
+    );
+  });
+
+  let blob = new Blob([rows.join("\n")], { type: "text/csv" });
+  let a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "game.csv";
+  a.click();
+}
+
+</script>
+
+</body>
+</html>
