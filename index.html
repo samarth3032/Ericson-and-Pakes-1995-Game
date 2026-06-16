@@ -163,6 +163,19 @@ function play(){
     decision: "stay"
   });
 
+sendToGoogle({
+  name: state.name,
+  reg: state.reg,
+  period: state.period,
+  A: state.A,
+  M: state.M,
+  D: state.D,
+  investment: x,
+  profit: profit,
+  cum_profit: state.cum_profit,
+  decision: "stay"
+});
+
   state.A = drawA(x);
   state.previousInvestment = x;
   state.M = drawM();
@@ -198,9 +211,38 @@ function exitGame(){
     decision: "exit"
   });
 
+sendToGoogle({
+  name: state.name,
+  reg: state.reg,
+  period: state.period,
+  A: state.A,
+  M: state.M,
+  D: state.D,
+  investment: 0,
+  profit: 0,
+  cum_profit: exit_value,
+  decision: "exit"
+});
+
   state.cum_profit = exit_value;
 
   endGame();
+}
+
+function sendToGoogle(row){
+
+  fetch(
+    "https://script.google.com/macros/s/AKfycbx5fNFEL-6eCHPGEJtA16jW1JdAS0uLSTxSvnOQed7hihITxa5ct9cGMy-lHL9eBdYH/exec",
+    {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(row)
+    }
+  );
+
 }
 
 function endGame(){
