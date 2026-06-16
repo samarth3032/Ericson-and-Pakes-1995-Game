@@ -181,7 +181,7 @@ function play(){
 
 function exitGame(){
   let t = state.period;
-  let last_profit = state.history.length > 0 ? state.history[state.history.length-1].profit : 0;
+  let average_profit = state.history.length > 0 ? state.cum_profit / state.history.length : 0;
 
   let exit_value = state.cum_profit + (CONFIG.T - t) * average_profit - CONFIG.exit_cost;
 
